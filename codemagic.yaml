@@ -8,7 +8,7 @@ workflows:
       - name: Obtener paquetes de Flutter
         script: flutter pub get
       - name: Generar APK Release
-     script: flutter build apk --release --android-skip-build-dependency-validation
+        script: flutter build apk --release --android-skip-build-dependency-validation
     artifacts:
       - build/**/outputs/**/*.apk
 
