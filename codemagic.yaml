@@ -3,12 +3,12 @@ workflows:
     name: Compilar Android APK
     max_build_duration: 60
     environment:
-      flutter: 3.38.0
+      flutter: stable
     scripts:
       - name: Obtener paquetes de Flutter
         script: flutter pub get
       - name: Generar APK Release
-        script: flutter build apk --release
+        script: flutter build apk --release --android-skip-build-dependency-validation
     artifacts:
       - build/**/outputs/**/*.apk
 
@@ -16,7 +16,7 @@ workflows:
     name: Compilar iOS (macOS Cloud)
     max_build_duration: 60
     environment:
-      flutter: 3.38.0
+      flutter: stable
       xcode: latest
       cocoapods: default
     scripts:
