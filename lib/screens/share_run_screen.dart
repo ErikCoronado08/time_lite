@@ -1,5 +1,4 @@
 import 'dart:io';
-import 'dart:math' as math;
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
@@ -18,10 +17,10 @@ class ShareRunScreen extends StatefulWidget {
 
   const ShareRunScreen({
     super.key,
-    required this.routePoints,
+    this.routePoints = const [],
     required this.distanceKm,
     required this.durationSeconds,
-    required this.calories,
+    this.calories = 0,
   });
 
   @override
@@ -69,17 +68,19 @@ class _ShareRunScreenState extends State<ShareRunScreen> {
     if (picked != null && mounted) {
       setState(() {
         _backgroundImage = File(picked.path);
-        _selectedTemplate = 2;
       });
     }
+  }
+
+  void _clearPhoto() {
+    setState(() {
+      _backgroundImage = null;
+    });
   }
 
   void _selectTemplate(int index) {
     final clamped = index.clamp(0, _totalTemplates - 1);
     setState(() => _selectedTemplate = clamped);
-    if (clamped == 2 && _backgroundImage == null) {
-      _pickPhoto(ImageSource.gallery);
-    }
     if (_selectorScrollController.hasClients) {
       _selectorScrollController.animateTo(
         (clamped * 120.0).clamp(
@@ -211,7 +212,8 @@ class _ShareRunScreenState extends State<ShareRunScreen> {
                         child: Stack(
                           fit: StackFit.expand,
                           children: [
-                            if (_selectedTemplate == 0)
+                            if (_selectedTemplate == 0 &&
+                                _backgroundImage == null)
                               ClipRRect(
                                 borderRadius: BorderRadius.circular(28),
                                 child: CustomPaint(
@@ -230,7 +232,7 @@ class _ShareRunScreenState extends State<ShareRunScreen> {
                 ),
               ),
 
-              if (_selectedTemplate == 0)
+              if (_selectedTemplate == 0 && _backgroundImage == null)
                 Padding(
                   padding: const EdgeInsets.only(bottom: 6),
                   child: Text(
@@ -243,26 +245,34 @@ class _ShareRunScreenState extends State<ShareRunScreen> {
                   ),
                 ),
 
-              if (_selectedTemplate == 2)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 8),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
+              // Controles de Cámara / Galería disponibles en todas las plantillas
+              Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: Wrap(
+                  alignment: WrapAlignment.center,
+                  spacing: 8,
+                  runSpacing: 6,
+                  children: [
+                    _photoSourceChip(
+                      icon: Icons.photo_library_rounded,
+                      label: appSettings.t('pick_photo'),
+                      onTap: () => _pickPhoto(ImageSource.gallery),
+                    ),
+                    _photoSourceChip(
+                      icon: Icons.camera_alt_rounded,
+                      label: isEs ? 'Cámara' : 'Camera',
+                      onTap: () => _pickPhoto(ImageSource.camera),
+                    ),
+                    if (_backgroundImage != null)
                       _photoSourceChip(
-                        icon: Icons.photo_library_rounded,
-                        label: appSettings.t('pick_photo'),
-                        onTap: () => _pickPhoto(ImageSource.gallery),
+                        icon: Icons.close_rounded,
+                        label: isEs ? 'Quitar' : 'Remove',
+                        accentColor: Colors.redAccent,
+                        onTap: _clearPhoto,
                       ),
-                      const SizedBox(width: 10),
-                      _photoSourceChip(
-                        icon: Icons.camera_alt_rounded,
-                        label: isEs ? 'Cámara' : 'Camera',
-                        onTap: () => _pickPhoto(ImageSource.camera),
-                      ),
-                    ],
-                  ),
+                  ],
                 ),
+              ),
 
               // Carrusel de 10 plantillas
               SizedBox(
@@ -367,29 +377,67 @@ class _ShareRunScreenState extends State<ShareRunScreen> {
     required IconData icon,
     required String label,
     required VoidCallback onTap,
+    Color accentColor = const Color(0xFF00E5FF),
   }) {
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+        padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 7),
         decoration: BoxDecoration(
-          color: const Color(0xFF00E5FF).withOpacity(0.18),
+          color: accentColor.withOpacity(0.18),
           borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: const Color(0xFF00E5FF).withOpacity(0.5)),
+          border: Border.all(color: accentColor.withOpacity(0.5)),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, size: 15, color: const Color(0xFF00E5FF)),
+            Icon(icon, size: 15, color: accentColor),
             const SizedBox(width: 6),
             Text(
               label,
-              style: const TextStyle(
-                color: Color(0xFF00E5FF),
+              style: TextStyle(
+                color: accentColor,
                 fontWeight: FontWeight.w800,
                 fontSize: 12,
               ),
             ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _photoOverlayWrapper({
+    required Widget child,
+    List<Color>? scrimColors,
+    Border? border,
+  }) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(28),
+      child: Container(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(28),
+          border: border,
+        ),
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            Image.file(_backgroundImage!, fit: BoxFit.cover),
+            Container(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: scrimColors ??
+                      [
+                        Colors.black.withOpacity(0.55),
+                        Colors.black.withOpacity(0.25),
+                        Colors.black.withOpacity(0.80),
+                      ],
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                ),
+              ),
+            ),
+            child,
           ],
         ),
       ),
@@ -423,7 +471,7 @@ class _ShareRunScreenState extends State<ShareRunScreen> {
   }
 
   // ---------------------------------------------------------------------------
-  // PLANTILLA 1: STICKER PNG TRANSPARENTE
+  // PLANTILLA 1: STICKER PNG TRANSPARENTE (O CON FOTO)
   // ---------------------------------------------------------------------------
   Widget _buildTemplate1Sticker() {
     final shadows = [
@@ -434,8 +482,7 @@ class _ShareRunScreenState extends State<ShareRunScreen> {
       ),
     ];
 
-    return Container(
-      color: Colors.transparent,
+    final content = Padding(
       padding: const EdgeInsets.all(24),
       child: Column(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -471,28 +518,37 @@ class _ShareRunScreenState extends State<ShareRunScreen> {
               ),
             ],
           ),
-          Expanded(
-            child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 12),
-              child: CustomPaint(
-                size: Size.infinite,
-                painter: _RouteVectorPainter(
-                  points: widget.routePoints,
-                  strokeColor: const Color(0xFF8FFF00),
+          Column(
+            children: [
+              Text(
+                appSettings.t('distance_label').toUpperCase(),
+                style: TextStyle(
+                  color: const Color(0xFF8FFF00),
+                  fontSize: 11,
+                  fontWeight: FontWeight.w900,
+                  letterSpacing: 2,
+                  shadows: shadows,
                 ),
               ),
-            ),
+              const SizedBox(height: 4),
+              FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Text(
+                  '${widget.distanceKm.toStringAsFixed(2)} km',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 48,
+                    fontWeight: FontWeight.w900,
+                    height: 1.0,
+                    shadows: shadows,
+                  ),
+                ),
+              ),
+            ],
           ),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceAround,
             children: [
-              _statColumn(
-                label: appSettings.t('distance_label').toUpperCase(),
-                value: '${widget.distanceKm.toStringAsFixed(2)} km',
-                primaryText: Colors.white,
-                secondaryText: Colors.white70,
-                shadows: shadows,
-              ),
               _statColumn(
                 label: appSettings.t('pace_label').toUpperCase(),
                 value: _formattedPace,
@@ -512,58 +568,71 @@ class _ShareRunScreenState extends State<ShareRunScreen> {
         ],
       ),
     );
+
+    if (_backgroundImage != null) {
+      return _photoOverlayWrapper(child: content);
+    }
+    return Container(color: Colors.transparent, child: content);
   }
 
   // ---------------------------------------------------------------------------
-  // PLANTILLA 2: CYBER GRID (HUD TÁCTICO CON CUADRÍCULA)
+  // PLANTILLA 2: CYBER GRID
   // ---------------------------------------------------------------------------
   Widget _buildTemplate2CyberGrid() {
     const cyan = Color(0xFF00E5FF);
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(28),
-      child: Container(
-        decoration: const BoxDecoration(
-          color: Color(0xFF060A12),
-        ),
-        child: CustomPaint(
-          painter: _TechGridPainter(lineColor: cyan.withOpacity(0.10)),
-          child: Padding(
-            padding: const EdgeInsets.all(22),
-            child: Column(
+
+    final innerContent = CustomPaint(
+      painter: _TechGridPainter(lineColor: cyan.withOpacity(0.10)),
+      child: Padding(
+        padding: const EdgeInsets.all(22),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    border: Border.all(color: cyan.withOpacity(0.6)),
+                    borderRadius: BorderRadius.circular(6),
+                    color: cyan.withOpacity(0.12),
+                  ),
+                  child: const Text(
+                    'TIME LITE // RUN',
+                    style: TextStyle(
+                      color: cyan,
+                      fontSize: 10,
+                      fontWeight: FontWeight.w900,
+                      letterSpacing: 1.5,
+                    ),
+                  ),
+                ),
+                Text(
+                  _formattedDate,
+                  style: const TextStyle(
+                    color: Colors.white70,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ],
+            ),
+            Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 10, vertical: 4),
-                      decoration: BoxDecoration(
-                        border: Border.all(color: cyan.withOpacity(0.6)),
-                        borderRadius: BorderRadius.circular(6),
-                        color: cyan.withOpacity(0.1),
-                      ),
-                      child: const Text(
-                        'GPS // TRACK_LOG',
-                        style: TextStyle(
-                          color: cyan,
-                          fontSize: 10,
-                          fontWeight: FontWeight.w900,
-                          letterSpacing: 1.5,
-                        ),
-                      ),
-                    ),
-                    Text(
-                      _formattedDate,
-                      style: const TextStyle(
-                        color: Colors.white54,
-                        fontSize: 11,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ],
+                Text(
+                  appSettings.t('distance_label').toUpperCase(),
+                  style: const TextStyle(
+                    color: cyan,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w900,
+                    letterSpacing: 2,
+                  ),
                 ),
-                const SizedBox(height: 14),
+                const SizedBox(height: 6),
                 FittedBox(
                   fit: BoxFit.scaleDown,
                   child: Row(
@@ -574,7 +643,7 @@ class _ShareRunScreenState extends State<ShareRunScreen> {
                         widget.distanceKm.toStringAsFixed(2),
                         style: const TextStyle(
                           color: Colors.white,
-                          fontSize: 44,
+                          fontSize: 54,
                           fontWeight: FontWeight.w900,
                           height: 1.0,
                         ),
@@ -584,7 +653,7 @@ class _ShareRunScreenState extends State<ShareRunScreen> {
                         'KM',
                         style: TextStyle(
                           color: cyan,
-                          fontSize: 18,
+                          fontSize: 20,
                           fontWeight: FontWeight.w900,
                           letterSpacing: 2,
                         ),
@@ -592,55 +661,59 @@ class _ShareRunScreenState extends State<ShareRunScreen> {
                     ],
                   ),
                 ),
-                Expanded(
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                    child: CustomPaint(
-                      size: Size.infinite,
-                      painter: _RouteVectorPainter(
-                        points: widget.routePoints,
-                        strokeColor: cyan,
-                        strokeWidth: 4.0,
-                      ),
-                    ),
-                  ),
-                ),
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF0C1524),
-                    borderRadius: BorderRadius.circular(14),
-                    border: Border.all(color: cyan.withOpacity(0.35)),
-                  ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      _statColumn(
-                        label: appSettings.t('time_label').toUpperCase(),
-                        value: _formattedDuration,
-                        primaryText: Colors.white,
-                        secondaryText: cyan,
-                      ),
-                      _statColumn(
-                        label: appSettings.t('pace_label').toUpperCase(),
-                        value: _formattedPace,
-                        primaryText: Colors.white,
-                        secondaryText: cyan,
-                      ),
-                      _statColumn(
-                        label: 'KCAL',
-                        value: '${widget.calories}',
-                        primaryText: Colors.white,
-                        secondaryText: cyan,
-                      ),
-                    ],
-                  ),
-                ),
               ],
             ),
-          ),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+              decoration: BoxDecoration(
+                color: const Color(0xFF0C1524).withOpacity(0.85),
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: cyan.withOpacity(0.35)),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceAround,
+                children: [
+                  _statColumn(
+                    label: appSettings.t('time_label').toUpperCase(),
+                    value: _formattedDuration,
+                    primaryText: Colors.white,
+                    secondaryText: cyan,
+                  ),
+                  Container(
+                    width: 1,
+                    height: 32,
+                    color: cyan.withOpacity(0.25),
+                  ),
+                  _statColumn(
+                    label: appSettings.t('pace_label').toUpperCase(),
+                    value: _formattedPace,
+                    primaryText: Colors.white,
+                    secondaryText: cyan,
+                  ),
+                ],
+              ),
+            ),
+          ],
         ),
+      ),
+    );
+
+    if (_backgroundImage != null) {
+      return _photoOverlayWrapper(
+        scrimColors: [
+          const Color(0xFF060A12).withOpacity(0.65),
+          const Color(0xFF060A12).withOpacity(0.35),
+          const Color(0xFF060A12).withOpacity(0.85),
+        ],
+        child: innerContent,
+      );
+    }
+
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(28),
+      child: Container(
+        color: const Color(0xFF060A12),
+        child: innerContent,
       ),
     );
   }
@@ -649,6 +722,7 @@ class _ShareRunScreenState extends State<ShareRunScreen> {
   // PLANTILLA 3: FOTO PERSONALIZADA + OVERLAY
   // ---------------------------------------------------------------------------
   Widget _buildTemplate3Photo() {
+    final isEs = appSettings.languageCode == 'es';
     final shadows = [
       Shadow(
         color: Colors.black.withOpacity(0.75),
@@ -667,11 +741,25 @@ class _ShareRunScreenState extends State<ShareRunScreen> {
           else
             Container(
               color: const Color(0xFF161B2E),
-              child: const Center(
-                child: Icon(
-                  Icons.add_a_photo_rounded,
-                  color: Colors.white24,
-                  size: 64,
+              child: Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(
+                      Icons.add_a_photo_rounded,
+                      color: Colors.white24,
+                      size: 56,
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      isEs ? 'Elige cámara o galería' : 'Pick camera or gallery',
+                      style: const TextStyle(
+                        color: Colors.white38,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ),
@@ -681,7 +769,7 @@ class _ShareRunScreenState extends State<ShareRunScreen> {
                 colors: [
                   Colors.black.withOpacity(0.6),
                   Colors.transparent,
-                  Colors.black.withOpacity(0.8),
+                  Colors.black.withOpacity(0.82),
                 ],
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
@@ -724,42 +812,51 @@ class _ShareRunScreenState extends State<ShareRunScreen> {
                     ),
                   ],
                 ),
-                Expanded(
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(
-                        vertical: 20, horizontal: 12),
-                    child: CustomPaint(
-                      size: Size.infinite,
-                      painter: _RouteVectorPainter(
-                        points: widget.routePoints,
-                        strokeColor: const Color(0xFF8FFF00),
+                Column(
+                  children: [
+                    Text(
+                      appSettings.t('distance_label').toUpperCase(),
+                      style: TextStyle(
+                        color: const Color(0xFF8FFF00),
+                        fontSize: 11,
+                        fontWeight: FontWeight.w900,
+                        letterSpacing: 1.8,
+                        shadows: shadows,
                       ),
                     ),
-                  ),
-                ),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceAround,
-                  children: [
-                    _statColumn(
-                      label: appSettings.t('distance_label').toUpperCase(),
-                      value: '${widget.distanceKm.toStringAsFixed(2)} km',
-                      primaryText: Colors.white,
-                      secondaryText: Colors.white70,
-                      shadows: shadows,
+                    const SizedBox(height: 4),
+                    FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Text(
+                        '${widget.distanceKm.toStringAsFixed(2)} km',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 44,
+                          fontWeight: FontWeight.w900,
+                          height: 1.0,
+                          shadows: shadows,
+                        ),
+                      ),
                     ),
-                    _statColumn(
-                      label: appSettings.t('pace_label').toUpperCase(),
-                      value: _formattedPace,
-                      primaryText: Colors.white,
-                      secondaryText: Colors.white70,
-                      shadows: shadows,
-                    ),
-                    _statColumn(
-                      label: appSettings.t('time_label').toUpperCase(),
-                      value: _formattedDuration,
-                      primaryText: Colors.white,
-                      secondaryText: Colors.white70,
-                      shadows: shadows,
+                    const SizedBox(height: 18),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceAround,
+                      children: [
+                        _statColumn(
+                          label: appSettings.t('pace_label').toUpperCase(),
+                          value: _formattedPace,
+                          primaryText: Colors.white,
+                          secondaryText: Colors.white70,
+                          shadows: shadows,
+                        ),
+                        _statColumn(
+                          label: appSettings.t('time_label').toUpperCase(),
+                          value: _formattedDuration,
+                          primaryText: Colors.white,
+                          secondaryText: Colors.white70,
+                          shadows: shadows,
+                        ),
+                      ],
                     ),
                   ],
                 ),
@@ -772,21 +869,14 @@ class _ShareRunScreenState extends State<ShareRunScreen> {
   }
 
   // ---------------------------------------------------------------------------
-  // PLANTILLA 4: BLAZE PRO (NARANJA ATLETISMO ESTILO STRAVA)
+  // PLANTILLA 4: BLAZE PRO
   // ---------------------------------------------------------------------------
   Widget _buildTemplate4BlazePro() {
-    return Container(
+    final content = Padding(
       padding: const EdgeInsets.all(24),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(28),
-        gradient: const LinearGradient(
-          colors: [Color(0xFFFF5E00), Color(0xFFE52D27), Color(0xFF8E0E00)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -804,7 +894,7 @@ class _ShareRunScreenState extends State<ShareRunScreen> {
                 padding:
                     const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                 decoration: BoxDecoration(
-                  color: Colors.black.withOpacity(0.25),
+                  color: Colors.black.withOpacity(0.28),
                   borderRadius: BorderRadius.circular(20),
                 ),
                 child: Text(
@@ -818,41 +908,42 @@ class _ShareRunScreenState extends State<ShareRunScreen> {
               ),
             ],
           ),
-          Expanded(
-            child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 8),
-              child: CustomPaint(
-                size: Size.infinite,
-                painter: _RouteVectorPainter(
-                  points: widget.routePoints,
-                  strokeColor: Colors.white,
-                  strokeWidth: 5.5,
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                appSettings.t('distance_label').toUpperCase(),
+                style: const TextStyle(
+                  color: Colors.white70,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w900,
+                  letterSpacing: 2,
                 ),
               ),
-            ),
-          ),
-          FittedBox(
-            fit: BoxFit.scaleDown,
-            child: Text(
-              '${widget.distanceKm.toStringAsFixed(2)} KM',
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 42,
-                fontWeight: FontWeight.w900,
-                letterSpacing: -1,
-                height: 1.0,
+              const SizedBox(height: 6),
+              FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Text(
+                  '${widget.distanceKm.toStringAsFixed(2)} KM',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 50,
+                    fontWeight: FontWeight.w900,
+                    letterSpacing: -1,
+                    height: 1.0,
+                  ),
+                ),
               ),
-            ),
+            ],
           ),
-          const SizedBox(height: 12),
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
             decoration: BoxDecoration(
-              color: Colors.black.withOpacity(0.28),
+              color: Colors.black.withOpacity(0.32),
               borderRadius: BorderRadius.circular(18),
             ),
             child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              mainAxisAlignment: MainAxisAlignment.spaceAround,
               children: [
                 _statColumn(
                   label: appSettings.t('time_label').toUpperCase(),
@@ -860,15 +951,10 @@ class _ShareRunScreenState extends State<ShareRunScreen> {
                   primaryText: Colors.white,
                   secondaryText: Colors.white70,
                 ),
+                Container(width: 1, height: 32, color: Colors.white24),
                 _statColumn(
                   label: appSettings.t('pace_label').toUpperCase(),
                   value: _formattedPace,
-                  primaryText: Colors.white,
-                  secondaryText: Colors.white70,
-                ),
-                _statColumn(
-                  label: 'KCAL',
-                  value: '${widget.calories}',
                   primaryText: Colors.white,
                   secondaryText: Colors.white70,
                 ),
@@ -878,21 +964,40 @@ class _ShareRunScreenState extends State<ShareRunScreen> {
         ],
       ),
     );
+
+    if (_backgroundImage != null) {
+      return _photoOverlayWrapper(
+        scrimColors: [
+          const Color(0xFFFF5E00).withOpacity(0.55),
+          const Color(0xFFE52D27).withOpacity(0.35),
+          const Color(0xFF4A0700).withOpacity(0.85),
+        ],
+        child: content,
+      );
+    }
+
+    return Container(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(28),
+        gradient: const LinearGradient(
+          colors: [Color(0xFFFF5E00), Color(0xFFE52D27), Color(0xFF8E0E00)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+      ),
+      child: content,
+    );
   }
 
   // ---------------------------------------------------------------------------
-  // PLANTILLA 5: EDITORIAL MAGAZINE (DISEÑO ASIMÉTRICO DE REVISTA)
+  // PLANTILLA 5: EDITORIAL MAGAZINE
   // ---------------------------------------------------------------------------
   Widget _buildTemplate5Editorial() {
-    return Container(
+    final content = Padding(
       padding: const EdgeInsets.all(22),
-      decoration: BoxDecoration(
-        color: const Color(0xFF111318),
-        borderRadius: BorderRadius.circular(28),
-        border: Border.all(color: Colors.white12),
-      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           Row(
             children: [
@@ -917,52 +1022,66 @@ class _ShareRunScreenState extends State<ShareRunScreen> {
               const Spacer(),
               Text(
                 _formattedDate,
-                style: const TextStyle(color: Colors.white38, fontSize: 11),
+                style: const TextStyle(color: Colors.white60, fontSize: 11),
               ),
             ],
           ),
-          const SizedBox(height: 12),
-          FittedBox(
-            fit: BoxFit.scaleDown,
-            child: Text(
-              '${widget.distanceKm.toStringAsFixed(2)} km',
-              style: const TextStyle(
-                color: Color(0xFF8FFF00),
-                fontSize: 46,
-                fontWeight: FontWeight.w900,
-                height: 1.0,
-              ),
-            ),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            '${appSettings.t('pace_label')}: $_formattedPace  •  $_formattedDuration',
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 13,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-          const SizedBox(height: 16),
-          Expanded(
-            child: Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: const Color(0xFF191D26),
-                borderRadius: BorderRadius.circular(22),
-                border: Border.all(color: Colors.white10),
-              ),
-              child: CustomPaint(
-                size: Size.infinite,
-                painter: _RouteVectorPainter(
-                  points: widget.routePoints,
-                  strokeColor: const Color(0xFF8FFF00),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                appSettings.t('distance_label').toUpperCase(),
+                style: const TextStyle(
+                  color: Colors.white54,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: 1.8,
                 ),
               ),
-            ),
+              const SizedBox(height: 6),
+              FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Text(
+                  '${widget.distanceKm.toStringAsFixed(2)} km',
+                  style: const TextStyle(
+                    color: Color(0xFF8FFF00),
+                    fontSize: 52,
+                    fontWeight: FontWeight.w900,
+                    height: 1.0,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+              Container(
+                width: double.infinity,
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF191D26).withOpacity(0.85),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: Colors.white12),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceAround,
+                  children: [
+                    _statColumn(
+                      label: appSettings.t('time_label').toUpperCase(),
+                      value: _formattedDuration,
+                      primaryText: Colors.white,
+                      secondaryText: Colors.white60,
+                    ),
+                    Container(width: 1, height: 32, color: Colors.white12),
+                    _statColumn(
+                      label: appSettings.t('pace_label').toUpperCase(),
+                      value: _formattedPace,
+                      primaryText: Colors.white,
+                      secondaryText: Colors.white60,
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ),
-          const SizedBox(height: 12),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
@@ -976,139 +1095,158 @@ class _ShareRunScreenState extends State<ShareRunScreen> {
                 ),
               ),
               Text(
-                '${widget.calories} KCAL',
+                _formattedDate,
                 style: const TextStyle(
                   color: Color(0xFF8FFF00),
                   fontWeight: FontWeight.w900,
-                  fontSize: 13,
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  // ---------------------------------------------------------------------------
-  // PLANTILLA 6: MINIMAL SWISS (BLANCO EDITORIAL CON CUADRÍCULA 2x2)
-  // ---------------------------------------------------------------------------
-  Widget _buildTemplate6MinimalSwiss() {
-    const ink = Color(0xFF101828);
-    const muted = Color(0xFF667085);
-    const accent = Color(0xFF3F51B5);
-
-    return Container(
-      padding: const EdgeInsets.all(24),
-      decoration: BoxDecoration(
-        color: const Color(0xFFF8F9FD),
-        borderRadius: BorderRadius.circular(28),
-        border: Border.all(color: Colors.black12),
-      ),
-      child: Column(
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              const Text(
-                'TIME LITE',
-                style: TextStyle(
-                  color: ink,
-                  fontWeight: FontWeight.w900,
-                  fontSize: 14,
-                  letterSpacing: 2,
-                ),
-              ),
-              Text(
-                _formattedDate,
-                style: const TextStyle(
-                  color: muted,
-                  fontWeight: FontWeight.w700,
                   fontSize: 12,
                 ),
               ),
             ],
           ),
-          const Divider(height: 20, color: Colors.black12),
-          Expanded(
-            child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 10),
-              child: CustomPaint(
-                size: Size.infinite,
-                painter: _RouteVectorPainter(
-                  points: widget.routePoints,
-                  strokeColor: accent,
-                ),
-              ),
-            ),
-          ),
-          const Divider(height: 20, color: Colors.black12),
-          Row(
+        ],
+      ),
+    );
+
+    if (_backgroundImage != null) {
+      return _photoOverlayWrapper(
+        border: Border.all(color: Colors.white12),
+        child: content,
+      );
+    }
+
+    return Container(
+      decoration: BoxDecoration(
+        color: const Color(0xFF111318),
+        borderRadius: BorderRadius.circular(28),
+        border: Border.all(color: Colors.white12),
+      ),
+      child: content,
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // PLANTILLA 6: MINIMAL SWISS
+  // ---------------------------------------------------------------------------
+  Widget _buildTemplate6MinimalSwiss() {
+    final hasPhoto = _backgroundImage != null;
+    final ink = hasPhoto ? Colors.white : const Color(0xFF101828);
+    final muted = hasPhoto ? Colors.white70 : const Color(0xFF667085);
+    final accent =
+        hasPhoto ? const Color(0xFF8FFF00) : const Color(0xFF3F51B5);
+    final dividerColor = hasPhoto ? Colors.white24 : Colors.black12;
+
+    final content = Padding(
+      padding: const EdgeInsets.all(24),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Column(
             children: [
-              Expanded(
-                child: _statColumn(
-                  label: appSettings.t('distance_label').toUpperCase(),
-                  value: '${widget.distanceKm.toStringAsFixed(2)} km',
-                  primaryText: ink,
-                  secondaryText: muted,
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    'TIME LITE',
+                    style: TextStyle(
+                      color: ink,
+                      fontWeight: FontWeight.w900,
+                      fontSize: 14,
+                      letterSpacing: 2,
+                    ),
+                  ),
+                  Text(
+                    _formattedDate,
+                    style: TextStyle(
+                      color: muted,
+                      fontWeight: FontWeight.w700,
+                      fontSize: 12,
+                    ),
+                  ),
+                ],
+              ),
+              Divider(height: 24, color: dividerColor),
+            ],
+          ),
+          Column(
+            children: [
+              Text(
+                appSettings.t('distance_label').toUpperCase(),
+                style: TextStyle(
+                  color: muted,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: 2,
                 ),
               ),
-              Container(width: 1, height: 34, color: Colors.black12),
-              Expanded(
-                child: _statColumn(
-                  label: appSettings.t('pace_label').toUpperCase(),
-                  value: _formattedPace,
-                  primaryText: ink,
-                  secondaryText: muted,
+              const SizedBox(height: 6),
+              FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Text(
+                  '${widget.distanceKm.toStringAsFixed(2)} km',
+                  style: TextStyle(
+                    color: accent,
+                    fontSize: 48,
+                    fontWeight: FontWeight.w900,
+                    height: 1.0,
+                  ),
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 12),
-          Row(
+          Column(
             children: [
-              Expanded(
-                child: _statColumn(
-                  label: appSettings.t('time_label').toUpperCase(),
-                  value: _formattedDuration,
-                  primaryText: ink,
-                  secondaryText: muted,
-                ),
-              ),
-              Container(width: 1, height: 34, color: Colors.black12),
-              Expanded(
-                child: _statColumn(
-                  label: appSettings.t('calories_label').toUpperCase(),
-                  value: '${widget.calories} kcal',
-                  primaryText: accent,
-                  secondaryText: muted,
-                ),
+              Divider(height: 24, color: dividerColor),
+              Row(
+                children: [
+                  Expanded(
+                    child: _statColumn(
+                      label: appSettings.t('pace_label').toUpperCase(),
+                      value: _formattedPace,
+                      primaryText: ink,
+                      secondaryText: muted,
+                    ),
+                  ),
+                  Container(width: 1, height: 38, color: dividerColor),
+                  Expanded(
+                    child: _statColumn(
+                      label: appSettings.t('time_label').toUpperCase(),
+                      value: _formattedDuration,
+                      primaryText: ink,
+                      secondaryText: muted,
+                    ),
+                  ),
+                ],
               ),
             ],
           ),
         ],
       ),
     );
+
+    if (hasPhoto) {
+      return _photoOverlayWrapper(child: content);
+    }
+
+    return Container(
+      decoration: BoxDecoration(
+        color: const Color(0xFFF8F9FD),
+        borderRadius: BorderRadius.circular(28),
+        border: Border.all(color: Colors.black12),
+      ),
+      child: content,
+    );
   }
 
   // ---------------------------------------------------------------------------
-  // PLANTILLA 7: VAPORWAVE 80S (NOCHE PÚRPURA & ROSA NEÓN)
+  // PLANTILLA 7: VAPORWAVE 80S
   // ---------------------------------------------------------------------------
   Widget _buildTemplate7Vaporwave() {
     const pink = Color(0xFFFF2A85);
     const aqua = Color(0xFF00F5D4);
 
-    return Container(
+    final content = Padding(
       padding: const EdgeInsets.all(24),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(28),
-        gradient: const LinearGradient(
-          colors: [Color(0xFF140726), Color(0xFF2E1052), Color(0xFF6B145A)],
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-        ),
-        border: Border.all(color: pink.withOpacity(0.5), width: 1.5),
-      ),
       child: Column(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
@@ -1123,7 +1261,7 @@ class _ShareRunScreenState extends State<ShareRunScreen> {
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: const Text(
-                  'NIGHT RUN',
+                  'TIME LITE // RUN',
                   style: TextStyle(
                     color: Colors.black,
                     fontWeight: FontWeight.w900,
@@ -1142,41 +1280,52 @@ class _ShareRunScreenState extends State<ShareRunScreen> {
               ),
             ],
           ),
-          Expanded(
-            child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 18, horizontal: 10),
-              child: CustomPaint(
-                size: Size.infinite,
-                painter: _RouteVectorPainter(
-                  points: widget.routePoints,
-                  strokeColor: pink,
-                  strokeWidth: 5.0,
+          Column(
+            children: [
+              Text(
+                appSettings.t('distance_label').toUpperCase(),
+                style: const TextStyle(
+                  color: aqua,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w900,
+                  letterSpacing: 2,
                 ),
               ),
-            ),
+              const SizedBox(height: 6),
+              FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Text(
+                  '${widget.distanceKm.toStringAsFixed(2)} KM',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 48,
+                    fontWeight: FontWeight.w900,
+                    height: 1.0,
+                    shadows: [
+                      Shadow(color: pink, blurRadius: 16),
+                    ],
+                  ),
+                ),
+              ),
+            ],
           ),
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
             decoration: BoxDecoration(
-              color: Colors.black.withOpacity(0.35),
+              color: Colors.black.withOpacity(0.42),
               borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: aqua.withOpacity(0.4)),
+              border: Border.all(color: aqua.withOpacity(0.45)),
             ),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceAround,
               children: [
-                _statColumn(
-                  label: appSettings.t('distance_label').toUpperCase(),
-                  value: '${widget.distanceKm.toStringAsFixed(2)} km',
-                  primaryText: Colors.white,
-                  secondaryText: aqua,
-                ),
                 _statColumn(
                   label: appSettings.t('pace_label').toUpperCase(),
                   value: _formattedPace,
                   primaryText: Colors.white,
                   secondaryText: pink,
                 ),
+                Container(width: 1, height: 32, color: aqua.withOpacity(0.3)),
                 _statColumn(
                   label: appSettings.t('time_label').toUpperCase(),
                   value: _formattedDuration,
@@ -1189,83 +1338,119 @@ class _ShareRunScreenState extends State<ShareRunScreen> {
         ],
       ),
     );
+
+    if (_backgroundImage != null) {
+      return _photoOverlayWrapper(
+        border: Border.all(color: pink.withOpacity(0.5), width: 1.5),
+        scrimColors: [
+          const Color(0xFF140726).withOpacity(0.65),
+          const Color(0xFF2E1052).withOpacity(0.35),
+          const Color(0xFF140726).withOpacity(0.85),
+        ],
+        child: content,
+      );
+    }
+
+    return Container(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(28),
+        gradient: const LinearGradient(
+          colors: [Color(0xFF140726), Color(0xFF2E1052), Color(0xFF6B145A)],
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+        ),
+        border: Border.all(color: pink.withOpacity(0.5), width: 1.5),
+      ),
+      child: content,
+    );
   }
 
   // ---------------------------------------------------------------------------
-  // PLANTILLA 8: GOLD ELITE (CARBONO Y ORO FINISHER)
+  // PLANTILLA 8: GOLD ELITE
   // ---------------------------------------------------------------------------
   Widget _buildTemplate8GoldElite() {
     const gold = Color(0xFFF5D061);
     const goldDark = Color(0xFFB88924);
 
-    return Container(
+    final content = Padding(
       padding: const EdgeInsets.all(24),
-      decoration: BoxDecoration(
-        color: const Color(0xFF0B0B0D),
-        borderRadius: BorderRadius.circular(28),
-        border: Border.all(color: gold.withOpacity(0.55), width: 1.5),
-      ),
       child: Column(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          const Icon(Icons.workspace_premium_rounded, color: gold, size: 30),
-          const SizedBox(height: 4),
-          const Text(
-            'TIME LITE PRESTIGE',
-            style: TextStyle(
-              color: gold,
-              fontWeight: FontWeight.w900,
-              fontSize: 12,
-              letterSpacing: 2.5,
-            ),
-          ),
-          Text(
-            _formattedDate,
-            style: const TextStyle(color: Colors.white38, fontSize: 11),
-          ),
-          Expanded(
-            child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 14),
-              child: CustomPaint(
-                size: Size.infinite,
-                painter: _RouteVectorPainter(
-                  points: widget.routePoints,
-                  strokeColor: gold,
+          Column(
+            children: [
+              const Icon(Icons.workspace_premium_rounded,
+                  color: gold, size: 30),
+              const SizedBox(height: 4),
+              const Text(
+                'TIME LITE PRESTIGE',
+                style: TextStyle(
+                  color: gold,
+                  fontWeight: FontWeight.w900,
+                  fontSize: 12,
+                  letterSpacing: 2.5,
                 ),
               ),
-            ),
+              const SizedBox(height: 2),
+              Text(
+                _formattedDate,
+                style: const TextStyle(color: Colors.white60, fontSize: 11),
+              ),
+            ],
+          ),
+          Column(
+            children: [
+              Text(
+                appSettings.t('distance_label').toUpperCase(),
+                style: const TextStyle(
+                  color: Colors.white60,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: 2,
+                ),
+              ),
+              const SizedBox(height: 6),
+              FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Text(
+                  '${widget.distanceKm.toStringAsFixed(2)} km',
+                  style: const TextStyle(
+                    color: gold,
+                    fontSize: 48,
+                    fontWeight: FontWeight.w900,
+                    height: 1.0,
+                  ),
+                ),
+              ),
+            ],
           ),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
             decoration: BoxDecoration(
               gradient: LinearGradient(
                 colors: [
-                  gold.withOpacity(0.14),
-                  goldDark.withOpacity(0.06),
+                  gold.withOpacity(0.18),
+                  goldDark.withOpacity(0.10),
                 ],
               ),
               borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: gold.withOpacity(0.35)),
+              border: Border.all(color: gold.withOpacity(0.4)),
             ),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceAround,
               children: [
                 _statColumn(
-                  label: appSettings.t('distance_label').toUpperCase(),
-                  value: '${widget.distanceKm.toStringAsFixed(2)} km',
-                  primaryText: gold,
-                  secondaryText: Colors.white60,
-                ),
-                _statColumn(
                   label: appSettings.t('pace_label').toUpperCase(),
                   value: _formattedPace,
                   primaryText: Colors.white,
-                  secondaryText: Colors.white60,
+                  secondaryText: Colors.white70,
                 ),
+                Container(width: 1, height: 32, color: gold.withOpacity(0.3)),
                 _statColumn(
                   label: appSettings.t('time_label').toUpperCase(),
                   value: _formattedDuration,
                   primaryText: Colors.white,
-                  secondaryText: Colors.white60,
+                  secondaryText: Colors.white70,
                 ),
               ],
             ),
@@ -1273,13 +1458,134 @@ class _ShareRunScreenState extends State<ShareRunScreen> {
         ],
       ),
     );
+
+    if (_backgroundImage != null) {
+      return _photoOverlayWrapper(
+        border: Border.all(color: gold.withOpacity(0.55), width: 1.5),
+        child: content,
+      );
+    }
+
+    return Container(
+      decoration: BoxDecoration(
+        color: const Color(0xFF0B0B0D),
+        borderRadius: BorderRadius.circular(28),
+        border: Border.all(color: gold.withOpacity(0.55), width: 1.5),
+      ),
+      child: content,
+    );
   }
 
   // ---------------------------------------------------------------------------
-  // PLANTILLA 9: AURORA GLASS (ESMERALDA CON TARJETAS TRANSLÚCIDAS)
+  // PLANTILLA 9: AURORA GLASS
   // ---------------------------------------------------------------------------
   Widget _buildTemplate9AuroraGlass() {
     const mint = Color(0xFF00FFA3);
+
+    final content = Padding(
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Row(
+                children: [
+                  Icon(Icons.bolt_rounded, color: mint, size: 20),
+                  SizedBox(width: 4),
+                  Text(
+                    'TIME LITE',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w900,
+                      fontSize: 13,
+                      letterSpacing: 1.8,
+                    ),
+                  ),
+                ],
+              ),
+              Text(
+                _formattedDate,
+                style: const TextStyle(color: Colors.white70, fontSize: 11),
+              ),
+            ],
+          ),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 24),
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.08),
+              borderRadius: BorderRadius.circular(24),
+              border: Border.all(color: mint.withOpacity(0.3)),
+            ),
+            child: Column(
+              children: [
+                Text(
+                  appSettings.t('distance_label').toUpperCase(),
+                  style: const TextStyle(
+                    color: mint,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w900,
+                    letterSpacing: 2,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text(
+                    '${widget.distanceKm.toStringAsFixed(2)} km',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 46,
+                      fontWeight: FontWeight.w900,
+                      height: 1.0,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.10),
+              borderRadius: BorderRadius.circular(22),
+              border: Border.all(color: Colors.white12),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceAround,
+              children: [
+                _statColumn(
+                  label: appSettings.t('pace_label').toUpperCase(),
+                  value: _formattedPace,
+                  primaryText: mint,
+                  secondaryText: Colors.white70,
+                ),
+                Container(width: 1, height: 32, color: Colors.white12),
+                _statColumn(
+                  label: appSettings.t('time_label').toUpperCase(),
+                  value: _formattedDuration,
+                  primaryText: Colors.white,
+                  secondaryText: Colors.white70,
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+
+    if (_backgroundImage != null) {
+      return _photoOverlayWrapper(
+        scrimColors: [
+          const Color(0xFF041C1B).withOpacity(0.65),
+          const Color(0xFF0B3B36).withOpacity(0.35),
+          const Color(0xFF041C1B).withOpacity(0.85),
+        ],
+        child: content,
+      );
+    }
 
     return ClipRRect(
       borderRadius: BorderRadius.circular(28),
@@ -1291,112 +1597,23 @@ class _ShareRunScreenState extends State<ShareRunScreen> {
             end: Alignment.bottomRight,
           ),
         ),
-        child: Padding(
-          padding: const EdgeInsets.all(20),
-          child: Column(
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  const Row(
-                    children: [
-                      Icon(Icons.bolt_rounded, color: mint, size: 20),
-                      SizedBox(width: 4),
-                      Text(
-                        'TIME LITE',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.w900,
-                          fontSize: 13,
-                          letterSpacing: 1.8,
-                        ),
-                      ),
-                    ],
-                  ),
-                  Text(
-                    _formattedDate,
-                    style: const TextStyle(color: Colors.white60, fontSize: 11),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 14),
-              Expanded(
-                child: Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.06),
-                    borderRadius: BorderRadius.circular(24),
-                    border: Border.all(color: mint.withOpacity(0.25)),
-                  ),
-                  child: CustomPaint(
-                    size: Size.infinite,
-                    painter: _RouteVectorPainter(
-                      points: widget.routePoints,
-                      strokeColor: mint,
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 14),
-              Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
-                decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.08),
-                  borderRadius: BorderRadius.circular(22),
-                  border: Border.all(color: Colors.white12),
-                ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceAround,
-                  children: [
-                    _statColumn(
-                      label: appSettings.t('distance_label').toUpperCase(),
-                      value: '${widget.distanceKm.toStringAsFixed(2)} km',
-                      primaryText: mint,
-                      secondaryText: Colors.white60,
-                    ),
-                    _statColumn(
-                      label: appSettings.t('pace_label').toUpperCase(),
-                      value: _formattedPace,
-                      primaryText: Colors.white,
-                      secondaryText: Colors.white60,
-                    ),
-                    _statColumn(
-                      label: appSettings.t('time_label').toUpperCase(),
-                      value: _formattedDuration,
-                      primaryText: Colors.white,
-                      secondaryText: Colors.white60,
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
+        child: content,
       ),
     );
   }
 
   // ---------------------------------------------------------------------------
-  // PLANTILLA 10: SPEED HUD (BARRA LATERAL VERTICAL + RUTA AMPLIADA)
+  // PLANTILLA 10: SPEED HUD
   // ---------------------------------------------------------------------------
   Widget _buildTemplate10SpeedHud() {
     const lime = Color(0xFF8FFF00);
     const cyan = Color(0xFF00E5FF);
 
-    return Container(
-      padding: const EdgeInsets.all(22),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(28),
-        gradient: const LinearGradient(
-          colors: [Color(0xFF0C101B), Color(0xFF182038)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        border: Border.all(color: Colors.white12),
-      ),
+    final content = Padding(
+      padding: const EdgeInsets.all(24),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -1412,69 +1629,58 @@ class _ShareRunScreenState extends State<ShareRunScreen> {
               ),
               Text(
                 _formattedDate,
-                style: const TextStyle(color: Colors.white54, fontSize: 11),
+                style: const TextStyle(color: Colors.white70, fontSize: 11),
               ),
             ],
           ),
-          const SizedBox(height: 16),
-          Expanded(
-            child: Row(
-              children: [
-                // Columna izquierda de métricas apiladas
-                Expanded(
-                  flex: 4,
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      _verticalHudStat(
-                        accent: lime,
-                        label: appSettings.t('distance_label').toUpperCase(),
-                        value: '${widget.distanceKm.toStringAsFixed(2)}\nkm',
-                      ),
-                      _verticalHudStat(
-                        accent: cyan,
-                        label: appSettings.t('pace_label').toUpperCase(),
-                        value: _formattedPace,
-                      ),
-                      _verticalHudStat(
-                        accent: Colors.amberAccent,
-                        label: appSettings.t('time_label').toUpperCase(),
-                        value: _formattedDuration,
-                      ),
-                      _verticalHudStat(
-                        accent: Colors.orangeAccent,
-                        label: 'KCAL',
-                        value: '${widget.calories}',
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(width: 10),
-                // Columna derecha: ruta GPS grande
-                Expanded(
-                  flex: 6,
-                  child: Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: Colors.black.withOpacity(0.28),
-                      borderRadius: BorderRadius.circular(22),
-                      border: Border.all(color: Colors.white10),
-                    ),
-                    child: CustomPaint(
-                      size: Size.infinite,
-                      painter: _RouteVectorPainter(
-                        points: widget.routePoints,
-                        strokeColor: lime,
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _verticalHudStat(
+                accent: lime,
+                label: appSettings.t('distance_label').toUpperCase(),
+                value: '${widget.distanceKm.toStringAsFixed(2)} km',
+                fontSize: 34,
+              ),
+              const SizedBox(height: 22),
+              _verticalHudStat(
+                accent: cyan,
+                label: appSettings.t('pace_label').toUpperCase(),
+                value: _formattedPace,
+                fontSize: 26,
+              ),
+              const SizedBox(height: 22),
+              _verticalHudStat(
+                accent: Colors.amberAccent,
+                label: appSettings.t('time_label').toUpperCase(),
+                value: _formattedDuration,
+                fontSize: 26,
+              ),
+            ],
           ),
+          const SizedBox(height: 4),
         ],
       ),
+    );
+
+    if (_backgroundImage != null) {
+      return _photoOverlayWrapper(
+        border: Border.all(color: Colors.white12),
+        child: content,
+      );
+    }
+
+    return Container(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(28),
+        gradient: const LinearGradient(
+          colors: [Color(0xFF0C101B), Color(0xFF182038)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        border: Border.all(color: Colors.white12),
+      ),
+      child: content,
     );
   }
 
@@ -1482,11 +1688,12 @@ class _ShareRunScreenState extends State<ShareRunScreen> {
     required Color accent,
     required String label,
     required String value,
+    double fontSize = 22,
   }) {
     return Container(
-      padding: const EdgeInsets.only(left: 10),
+      padding: const EdgeInsets.only(left: 14),
       decoration: BoxDecoration(
-        border: Border(left: BorderSide(color: accent, width: 3)),
+        border: Border(left: BorderSide(color: accent, width: 4)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1495,22 +1702,23 @@ class _ShareRunScreenState extends State<ShareRunScreen> {
             label,
             style: TextStyle(
               color: accent,
-              fontSize: 9.5,
+              fontSize: 10.5,
               fontWeight: FontWeight.w900,
-              letterSpacing: 1.1,
+              letterSpacing: 1.4,
             ),
           ),
-          const SizedBox(height: 2),
+          const SizedBox(height: 4),
           FittedBox(
             fit: BoxFit.scaleDown,
             alignment: Alignment.centerLeft,
             child: Text(
               value,
-              style: const TextStyle(
+              style: TextStyle(
                 color: Colors.white,
-                fontSize: 18,
+                fontSize: fontSize,
                 fontWeight: FontWeight.w900,
-                height: 1.1,
+                height: 1.05,
+                fontFeatures: const [FontFeature.tabularFigures()],
               ),
             ),
           ),
@@ -1546,7 +1754,7 @@ class _ShareRunScreenState extends State<ShareRunScreen> {
             value,
             style: TextStyle(
               color: primaryText,
-              fontSize: 17,
+              fontSize: 18,
               fontWeight: FontWeight.w900,
               fontFeatures: const [FontFeature.tabularFigures()],
               shadows: shadows,
@@ -1556,113 +1764,6 @@ class _ShareRunScreenState extends State<ShareRunScreen> {
       ],
     );
   }
-}
-
-class _RouteVectorPainter extends CustomPainter {
-  final List<LatLng> points;
-  final Color strokeColor;
-  final double strokeWidth;
-
-  _RouteVectorPainter({
-    required this.points,
-    required this.strokeColor,
-    this.strokeWidth = 4.5,
-  });
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final glowPaint = Paint()
-      ..color = strokeColor.withOpacity(0.45)
-      ..strokeWidth = strokeWidth * 2.2
-      ..style = PaintingStyle.stroke
-      ..strokeCap = StrokeCap.round
-      ..strokeJoin = StrokeJoin.round
-      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 6);
-
-    final linePaint = Paint()
-      ..color = strokeColor
-      ..strokeWidth = strokeWidth
-      ..style = PaintingStyle.stroke
-      ..strokeCap = StrokeCap.round
-      ..strokeJoin = StrokeJoin.round;
-
-    if (points.length < 2) {
-      final path = Path();
-      path.moveTo(size.width * 0.15, size.height * 0.65);
-      path.cubicTo(
-        size.width * 0.35,
-        size.height * 0.25,
-        size.width * 0.65,
-        size.height * 0.75,
-        size.width * 0.85,
-        size.height * 0.35,
-      );
-      canvas.drawPath(path, glowPaint);
-      canvas.drawPath(path, linePaint);
-      return;
-    }
-
-    double minLat = points.first.latitude;
-    double maxLat = points.first.latitude;
-    double minLng = points.first.longitude;
-    double maxLng = points.first.longitude;
-
-    for (final p in points) {
-      minLat = math.min(minLat, p.latitude);
-      maxLat = math.max(maxLat, p.latitude);
-      minLng = math.min(minLng, p.longitude);
-      maxLng = math.max(maxLng, p.longitude);
-    }
-
-    final latSpan =
-        (maxLat - minLat).abs() < 0.00001 ? 0.0001 : (maxLat - minLat);
-    final lngSpan =
-        (maxLng - minLng).abs() < 0.00001 ? 0.0001 : (maxLng - minLng);
-
-    const padding = 14.0;
-    final drawW = size.width - padding * 2;
-    final drawH = size.height - padding * 2;
-
-    final scale = math.min(drawW / lngSpan, drawH / latSpan);
-    final offsetX = padding + (drawW - lngSpan * scale) / 2;
-    final offsetY = padding + (drawH - latSpan * scale) / 2;
-
-    Offset toOffset(LatLng p) {
-      final x = offsetX + (p.longitude - minLng) * scale;
-      final y = offsetY + (maxLat - p.latitude) * scale;
-      return Offset(x, y);
-    }
-
-    final path = Path();
-    final firstOffset = toOffset(points.first);
-    path.moveTo(firstOffset.dx, firstOffset.dy);
-
-    for (int i = 1; i < points.length; i++) {
-      final pt = toOffset(points[i]);
-      path.lineTo(pt.dx, pt.dy);
-    }
-
-    canvas.drawPath(path, glowPaint);
-    canvas.drawPath(path, linePaint);
-
-    final lastOffset = toOffset(points.last);
-    canvas.drawCircle(firstOffset, 5.0, Paint()..color = Colors.white);
-    canvas.drawCircle(lastOffset, 6.0, Paint()..color = strokeColor);
-    canvas.drawCircle(
-      lastOffset,
-      6.0,
-      Paint()
-        ..color = Colors.white
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 2,
-    );
-  }
-
-  @override
-  bool shouldRepaint(covariant _RouteVectorPainter oldDelegate) =>
-      oldDelegate.points != points ||
-      oldDelegate.strokeColor != strokeColor ||
-      oldDelegate.strokeWidth != strokeWidth;
 }
 
 class _TechGridPainter extends CustomPainter {
